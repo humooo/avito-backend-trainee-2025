@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/humooo/avito-backend-trainee-2025/internal/models"
@@ -41,7 +42,7 @@ func (r *MemoryUserRepo) ListByTeam(ctx context.Context, teamID int64, activeOnl
 	var res []*models.User
 	for _, user := range r.users {
 		if user.TeamID == teamID {
-			if user.IsActive && !activeOnly {
+			if activeOnly && !user.IsActive {
 				continue
 			}
 			res = append(res, user)
@@ -53,6 +54,10 @@ func (r *MemoryUserRepo) ListByTeam(ctx context.Context, teamID int64, activeOnl
 func (r *MemoryUserRepo) SetActive(ctx context.Context, id int64, active bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.users[id].IsActive = active
+	user, ok := r.users[id]
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+	user.IsActive = active
 	return nil
 }

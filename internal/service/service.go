@@ -2,16 +2,6 @@ package service
 
 import "github.com/humooo/avito-backend-trainee-2025/internal/repo"
 
-type PRService struct {
-	prRepo   repo.PRRepository
-	userRepo repo.UserRepository
-	teamRepo repo.TeamRepository
-}
-
-func NewPRService(prRepo repo.PRRepository, userRepo repo.UserRepository, teamRepo repo.TeamRepository) *PRService {
-	return &PRService{prRepo: prRepo, userRepo: userRepo, teamRepo: teamRepo}
-}
-
 type UserService struct {
 	userRepo repo.UserRepository
 }
