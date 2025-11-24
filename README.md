@@ -34,7 +34,9 @@ go mod tidy
 
 # Генерация кода из OpenAPI
 go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
-oapi-codegen -generate types,server -o internal/api/api.gen.go -package api docs/openapi.yml
+oapi-codegen -generate types -o internal/api/types.gen.go -package api docs/openapi.yml
+oapi-codegen -generate chi-server -o internal/api/server.gen.go -package api docs/openapi.yml
+
 
 # Запуск сервера
 go run ./cmd/app
