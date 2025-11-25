@@ -22,3 +22,8 @@ type PullRequest struct {
 	CreatedAt time.Time
 	MergedAt  *time.Time
 }
+
+type UserStat struct {
+	Username    string
+	ReviewCount int
+}

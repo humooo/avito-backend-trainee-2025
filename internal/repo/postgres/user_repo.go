@@ -70,3 +70,33 @@ func (r *UserRepo) SetActive(ctx context.Context, id string, active bool) error 
 	}
 	return nil
 }
+
+type UserStat struct {
+	Username    string `json:"username"`
+	ReviewCount int    `json:"review_count"`
+}
+
+func (r *UserRepo) GetStats(ctx context.Context) ([]models.UserStat, error) {
+	query := `
+		SELECT u.username, COUNT(r.pr_id)
+		FROM users u
+		LEFT JOIN pr_reviewers r ON u.id = r.reviewer_id
+		GROUP BY u.id, u.username
+		ORDER BY COUNT(r.pr_id) DESC
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []models.UserStat
+	for rows.Next() {
+		var s models.UserStat
+		if err := rows.Scan(&s.Username, &s.ReviewCount); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, nil
+}

@@ -31,3 +31,7 @@ func (s *UserService) GetByID(ctx context.Context, id string) (*models.User, err
 func (s *UserService) GetReviewPRs(ctx context.Context, reviewerID string) ([]*models.PullRequest, error) {
 	return s.prRepo.ListByReviewer(ctx, reviewerID)
 }
+
+func (s *UserService) GetStats(ctx context.Context) ([]models.UserStat, error) {
+	return s.userRepo.GetStats(ctx)
+}

@@ -28,7 +28,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(context.Background()); err != nil {
+	if err = pool.Ping(context.Background()); err != nil {
 		log.Fatalf("Unable to ping database: %v", err)
 	}
 	log.Println("Connected to PostgreSQL")
@@ -61,6 +61,8 @@ func main() {
 		TeamService: teamService,
 	}
 	api.HandlerFromMux(handler, r)
+
+	r.Get("/stats", handler.CustomGetStats)
 
 	srv := &http.Server{
 		Addr:    ":8080",

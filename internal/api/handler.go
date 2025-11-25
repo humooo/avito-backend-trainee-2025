@@ -22,7 +22,7 @@ func (h *ApiHandler) writeError(w http.ResponseWriter, code ErrorResponseErrorCo
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) PostTeamAdd(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (h *ApiHandler) PostTeamAdd(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) GetTeamGet(w http.ResponseWriter, r *http.Request, params GetTeamGetParams) {
@@ -69,7 +69,7 @@ func (h *ApiHandler) GetTeamGet(w http.ResponseWriter, r *http.Request, params G
 
 	resp := mapTeamToResponse(team, users)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) PostUsersSetIsActive(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func (h *ApiHandler) PostUsersSetIsActive(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]User{"user": resp})
+	_ = json.NewEncoder(w).Encode(map[string]User{"user": resp})
 }
 
 func (h *ApiHandler) PostPullRequestCreate(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +122,7 @@ func (h *ApiHandler) PostPullRequestCreate(w http.ResponseWriter, r *http.Reques
 	resp := map[string]PullRequest{"pr": mapPRToResponse(pr)}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) PostPullRequestMerge(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func (h *ApiHandler) PostPullRequestMerge(w http.ResponseWriter, r *http.Request
 
 	resp := map[string]PullRequest{"pr": mapPRToResponse(pr)}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) PostPullRequestReassign(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +176,7 @@ func (h *ApiHandler) PostPullRequestReassign(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *ApiHandler) GetUsersGetReview(w http.ResponseWriter, r *http.Request, params GetUsersGetReviewParams) {
@@ -200,5 +200,26 @@ func (h *ApiHandler) GetUsersGetReview(w http.ResponseWriter, r *http.Request, p
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (h *ApiHandler) CustomGetStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.UserService.GetStats(r.Context())
+	if err != nil {
+		h.writeError(w, "INTERNAL", err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type StatResponse struct {
+		Username string `json:"username"`
+		Count    int    `json:"review_count"`
+	}
+
+	resp := make([]StatResponse, len(stats))
+	for i, s := range stats {
+		resp[i] = StatResponse{Username: s.Username, Count: s.ReviewCount}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }

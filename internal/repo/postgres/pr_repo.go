@@ -23,7 +23,7 @@ func (r *PRRepo) CreateWithReviewers(ctx context.Context, pr *models.PullRequest
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx, "INSERT INTO pull_requests (id, title, author_id, status) VALUES ($1, $2, $3, $4)",
 		pr.ID, pr.Title, pr.AuthorID, pr.Status)

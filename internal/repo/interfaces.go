@@ -11,6 +11,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	ListByTeam(ctx context.Context, teamName string, activeOnly bool) ([]*models.User, error)
 	SetActive(ctx context.Context, id string, active bool) error
+	GetStats(ctx context.Context) ([]models.UserStat, error)
 }
 
 type TeamRepository interface {
