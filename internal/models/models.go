@@ -1,21 +1,24 @@
 package models
 
+import "time"
+
 type User struct {
-	ID       int64
+	ID       string
 	Name     string
 	IsActive bool
-	TeamID   int64
+	TeamName string
 }
 
 type Team struct {
-	ID   int64
 	Name string
 }
 
 type PullRequest struct {
-	ID        int64
+	ID        string
 	Title     string
-	AuthorID  int64
+	AuthorID  string
 	Status    string
-	Reviewers []int64
+	Reviewers []string
+	CreatedAt time.Time
+	MergedAt  *time.Time
 }

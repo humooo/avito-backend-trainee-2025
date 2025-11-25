@@ -3,184 +3,202 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/humooo/avito-backend-trainee-2025/internal/models"
 	"github.com/humooo/avito-backend-trainee-2025/internal/service"
 )
 
-// ApiHandler implements ServerInterface (from server.gen.go)
 type ApiHandler struct {
 	PRService   *service.PRService
 	UserService *service.UserService
 	TeamService *service.TeamService
 }
 
-func (h *ApiHandler) PostPullRequestCreate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body PostPullRequestCreateJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	authorID, err := strconv.ParseInt(body.AuthorId, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid author_id", http.StatusBadRequest)
-		return
-	}
-	pr, err := h.PRService.Create(ctx, body.PullRequestName, authorID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	// convert to API model
-	writeJSONWithStatus(w, PRToResponse(pr), http.StatusCreated)
-}
+// Хелпер для отправки ошибок в формате generated ErrorResponse
+func (h *ApiHandler) writeError(w http.ResponseWriter, code ErrorResponseErrorCode, message string, status int) {
+	resp := ErrorResponse{}
+	resp.Error.Code = code
+	resp.Error.Message = message
 
-func (h *ApiHandler) PostPullRequestMerge(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body PostPullRequestMergeJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	prID, err := strconv.ParseInt(body.PullRequestId, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid pull_request_id", http.StatusBadRequest)
-		return
-	}
-	pr, err := h.PRService.Merge(ctx, prID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, PRToResponse(pr))
-}
-
-func (h *ApiHandler) PostPullRequestReassign(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body PostPullRequestReassignJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	prID, err := strconv.ParseInt(body.PullRequestId, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid pull_request_id", http.StatusBadRequest)
-		return
-	}
-	oldID, err := strconv.ParseInt(body.OldUserId, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid old_user_id", http.StatusBadRequest)
-		return
-	}
-	pr, err := h.PRService.Reassign(ctx, prID, oldID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	writeJSON(w, PRToResponse(pr))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) PostTeamAdd(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	var body PostTeamAddJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.writeError(w, NOTFOUND, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// convert api.Team.Members -> []models.User
 	var members []models.User
 	for _, m := range body.Members {
-		var uid int64
-		if m.UserId != "" {
-			if v, err := strconv.ParseInt(m.UserId, 10, 64); err == nil {
-				uid = v
-			}
-		}
 		members = append(members, models.User{
-			ID:       uid,
+			ID:       m.UserId,
 			Name:     m.Username,
 			IsActive: m.IsActive,
 		})
 	}
 
-	team, err := h.TeamService.Create(ctx, body.TeamName, members)
+	team, err := h.TeamService.Create(r.Context(), body.TeamName, members)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		if err.Error() == "team exists" {
+			h.writeError(w, TEAMEXISTS, "team already exists", http.StatusBadRequest)
+			return
+		}
+		h.writeError(w, NOTFOUND, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	users, _ := h.UserService.ListByTeam(ctx, team.ID, false)
-	resp := TeamToResponse(team, users)
-	writeJSONWithStatus(w, resp, http.StatusCreated)
+	users, _ := h.UserService.ListByTeam(r.Context(), team.Name, false)
+
+	resp := mapTeamToResponse(team, users)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *ApiHandler) GetTeamGet(w http.ResponseWriter, r *http.Request, params GetTeamGetParams) {
-	ctx := r.Context()
-	// team_name is string per OpenAPI
-	teamName := params.TeamName
-	team, users, err := h.TeamService.GetByName(ctx, teamName)
+	team, users, err := h.TeamService.GetByName(r.Context(), params.TeamName)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		h.writeError(w, NOTFOUND, "team not found", http.StatusNotFound)
 		return
 	}
-	resp := TeamToResponse(team, users)
-	writeJSON(w, resp)
+
+	resp := mapTeamToResponse(team, users)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ApiHandler) PostUsersSetIsActive(w http.ResponseWriter, r *http.Request) {
+	var body PostUsersSetIsActiveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.writeError(w, NOTFOUND, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	err := h.UserService.SetIsActive(r.Context(), body.UserId, body.IsActive)
+	if err != nil {
+		h.writeError(w, NOTFOUND, "user not found", http.StatusNotFound)
+		return
+	}
+
+	u, _ := h.UserService.GetByID(r.Context(), body.UserId)
+
+	resp := User{
+		UserId:   u.ID,
+		Username: u.Name,
+		TeamName: u.TeamName,
+		IsActive: u.IsActive,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]User{"user": resp})
+}
+
+func (h *ApiHandler) PostPullRequestCreate(w http.ResponseWriter, r *http.Request) {
+	var body PostPullRequestCreateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.writeError(w, NOTFOUND, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	pr, err := h.PRService.Create(r.Context(), body.PullRequestId, body.PullRequestName, body.AuthorId)
+	if err != nil {
+		if err.Error() == "pr exists" {
+			h.writeError(w, PREXISTS, "pr id already exists", http.StatusConflict)
+			return
+		}
+		if err.Error() == "author not found" || err.Error() == "team not found" {
+			h.writeError(w, NOTFOUND, err.Error(), http.StatusNotFound)
+			return
+		}
+		h.writeError(w, NOTFOUND, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]PullRequest{"pr": mapPRToResponse(pr)}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ApiHandler) PostPullRequestMerge(w http.ResponseWriter, r *http.Request) {
+	var body PostPullRequestMergeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.writeError(w, NOTFOUND, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	pr, err := h.PRService.Merge(r.Context(), body.PullRequestId)
+	if err != nil {
+		h.writeError(w, NOTFOUND, "pr not found", http.StatusNotFound)
+		return
+	}
+
+	resp := map[string]PullRequest{"pr": mapPRToResponse(pr)}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ApiHandler) PostPullRequestReassign(w http.ResponseWriter, r *http.Request) {
+	var body PostPullRequestReassignJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.writeError(w, NOTFOUND, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	pr, newID, err := h.PRService.Reassign(r.Context(), body.PullRequestId, body.OldUserId)
+	if err != nil {
+		switch err.Error() {
+		case "pr merged":
+			h.writeError(w, PRMERGED, "cannot reassign on merged PR", http.StatusConflict)
+		case "reviewer not assigned":
+			h.writeError(w, NOTASSIGNED, "reviewer is not assigned to this PR", http.StatusConflict)
+		case "no candidates":
+			h.writeError(w, NOCANDIDATE, "no active replacement candidate in team", http.StatusConflict)
+		case "pr not found", "old reviewer not found":
+			h.writeError(w, NOTFOUND, err.Error(), http.StatusNotFound)
+		default:
+			h.writeError(w, NOTFOUND, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	response := struct {
+		PR         PullRequest `json:"pr"`
+		ReplacedBy string      `json:"replaced_by"`
+	}{
+		PR:         mapPRToResponse(pr),
+		ReplacedBy: newID,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func (h *ApiHandler) GetUsersGetReview(w http.ResponseWriter, r *http.Request, params GetUsersGetReviewParams) {
-	ctx := r.Context()
-	uid, err := strconv.ParseInt(params.UserId, 10, 64)
+	prs, err := h.UserService.GetReviewPRs(r.Context(), params.UserId)
 	if err != nil {
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		h.writeError(w, NOTFOUND, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	prs, err := h.UserService.GetReviewPRs(ctx, uid)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var out []PullRequestShort
+
+	out := make([]PullRequestShort, 0)
 	for _, p := range prs {
-		out = append(out, PRToShort(p))
+		out = append(out, mapPullRequestShort(p))
 	}
-	writeJSON(w, struct {
+
+	response := struct {
 		UserId       string             `json:"user_id"`
 		PullRequests []PullRequestShort `json:"pull_requests"`
 	}{
 		UserId:       params.UserId,
 		PullRequests: out,
-	})
-}
-
-func (h *ApiHandler) PostUsersSetIsActive(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body PostUsersSetIsActiveJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
-	id, err := strconv.ParseInt(body.UserId, 10, 64)
-	if err != nil {
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
-		return
-	}
-	if err := h.UserService.SetIsActive(ctx, id, body.IsActive); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	// simple OK response as OpenAPI does not define a full user response here
-	writeJSONWithStatus(w, map[string]string{"status": "ok"}, http.StatusOK)
-}
 
-func writeJSON(w http.ResponseWriter, v any) {
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeJSONWithStatus(w http.ResponseWriter, v any, status int) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	json.NewEncoder(w).Encode(response)
 }

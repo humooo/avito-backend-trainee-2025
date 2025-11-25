@@ -1,19 +1,16 @@
 version: '3.8'
 
 services:
-  # Твое приложение
   app:
     build: .
     ports:
       - "8080:8080"
     environment:
-      # Строка подключения. Обрати внимание: хост называется 'db' (имя сервиса ниже)
       - DATABASE_URL=postgres://user:password@db:5432/avito_db?sslmode=disable
     depends_on:
       db:
         condition: service_healthy
 
-  # База данных PostgreSQL
   db:
     image: postgres:15-alpine
     environment:
@@ -22,7 +19,6 @@ services:
       POSTGRES_DB: avito_db
     ports:
       - "5433:5432"
-    # Хелсчек: приложение не запустится, пока база не скажет "я готова"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d avito_db"]
       interval: 5s

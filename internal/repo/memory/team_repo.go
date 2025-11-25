@@ -1,47 +1,32 @@
-package memory
+package postgres
 
 import (
 	"context"
-	"sync"
+	"errors"
 
 	"github.com/humooo/avito-backend-trainee-2025/internal/models"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type MemoryTeamRepo struct {
-	mu     sync.Mutex
-	teams  map[int64]*models.Team
-	nextID int64
+type TeamRepo struct {
+	pool *pgxpool.Pool
 }
 
-func NewMemoryTeamRepo() *MemoryTeamRepo {
-	return &MemoryTeamRepo{
-		teams:  make(map[int64]*models.Team),
-		nextID: 1,
+func NewTeamRepo(pool *pgxpool.Pool) *TeamRepo {
+	return &TeamRepo{pool: pool}
+}
+
+func (r *TeamRepo) Create(ctx context.Context, team *models.Team) error {
+	_, err := r.pool.Exec(ctx, "INSERT INTO teams (name) VALUES ($1)", team.Name)
+	return err
+}
+
+func (r *TeamRepo) FindByName(ctx context.Context, name string) (*models.Team, error) {
+	t := &models.Team{}
+	err := r.pool.QueryRow(ctx, "SELECT name FROM teams WHERE name=$1", name).Scan(&t.Name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
 	}
-}
-
-func (r *MemoryTeamRepo) Create(ctx context.Context, team *models.Team) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	team.ID = r.nextID
-	r.nextID++
-	r.teams[team.ID] = team
-	return nil
-}
-
-func (r *MemoryTeamRepo) GetByID(ctx context.Context, id int64) (*models.Team, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.teams[id], nil
-}
-
-func (r *MemoryTeamRepo) FindByName(ctx context.Context, name string) (*models.Team, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, t := range r.teams {
-		if t.Name == name {
-			return t, nil
-		}
-	}
-	return nil, nil
+	return t, err
 }

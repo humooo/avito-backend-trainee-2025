@@ -1,87 +1,69 @@
-package memory
+package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/humooo/avito-backend-trainee-2025/internal/models"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type MemoryUserRepo struct {
-	mu     sync.Mutex
-	users  map[int64]*models.User
-	nextID int64
+type UserRepo struct {
+	pool *pgxpool.Pool
 }
 
-func NewMemoryUserRepo() *MemoryUserRepo {
-	return &MemoryUserRepo{
-		users:  make(map[int64]*models.User),
-		nextID: 1,
+func NewUserRepo(pool *pgxpool.Pool) *UserRepo {
+	return &UserRepo{pool: pool}
+}
+
+func (r *UserRepo) Upsert(ctx context.Context, user *models.User) error {
+	_, err := r.pool.Exec(ctx,
+		"INSERT INTO users (id, username, is_active, team_name) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET username=$2, is_active=$3, team_name=$4",
+		user.ID, user.Name, user.IsActive, user.TeamName)
+	return err
+}
+
+func (r *UserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
+	u := &models.User{}
+	err := r.pool.QueryRow(ctx, "SELECT id, username, is_active, team_name FROM users WHERE id=$1", id).
+		Scan(&u.ID, &u.Name, &u.IsActive, &u.TeamName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
 	}
+	return u, err
 }
 
-func (r *MemoryUserRepo) Create(ctx context.Context, user *models.User) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *UserRepo) ListByTeam(ctx context.Context, teamName string, activeOnly bool) ([]*models.User, error) {
+	query := "SELECT id, username, is_active, team_name FROM users WHERE team_name=$1"
+	if activeOnly {
+		query += " AND is_active = true"
+	}
+	rows, err := r.pool.Query(ctx, query, teamName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-	// ИСПРАВЛЕНИЕ: Если ID задан извне (например, при создании команды с конкретными ID),
-	// мы должны использовать его, а не перезаписывать.
-	if user.ID != 0 {
-		// Если вставляем ID больше текущего счетчика, подтягиваем счетчик
-		if user.ID >= r.nextID {
-			r.nextID = user.ID + 1
+	var users []*models.User
+	for rows.Next() {
+		u := &models.User{}
+		if err := rows.Scan(&u.ID, &u.Name, &u.IsActive, &u.TeamName); err != nil {
+			return nil, err
 		}
-	} else {
-		// Иначе генерируем новый
-		user.ID = r.nextID
-		r.nextID++
+		users = append(users, u)
 	}
-
-	r.users[user.ID] = user
-	return nil
+	return users, nil
 }
 
-func (r *MemoryUserRepo) GetByID(ctx context.Context, id int64) (*models.User, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// Возвращаем nil, если ключа нет (безопасно для логики сервиса)
-	return r.users[id], nil
-}
-
-func (r *MemoryUserRepo) ListByTeam(ctx context.Context, teamID int64, activeOnly bool) ([]*models.User, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var res []*models.User
-	for _, user := range r.users {
-		if user.TeamID == teamID {
-			if activeOnly && !user.IsActive {
-				continue
-			}
-			// Важно возвращать копию или тот же указатель (в in-memory указатель ок)
-			res = append(res, user)
-		}
+func (r *UserRepo) SetActive(ctx context.Context, id string, active bool) error {
+	cmd, err := r.pool.Exec(ctx, "UPDATE users SET is_active=$1 WHERE id=$2", active, id)
+	if err != nil {
+		return err
 	}
-	return res, nil
-}
-
-func (r *MemoryUserRepo) SetActive(ctx context.Context, id int64, active bool) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	user, ok := r.users[id]
-	if !ok {
+	if cmd.RowsAffected() == 0 {
 		return fmt.Errorf("user not found")
 	}
-	user.IsActive = active
-	return nil
-}
-
-func (r *MemoryUserRepo) Update(ctx context.Context, user *models.User) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.users[user.ID]; !ok {
-		return fmt.Errorf("not found")
-	}
-	r.users[user.ID] = user
 	return nil
 }

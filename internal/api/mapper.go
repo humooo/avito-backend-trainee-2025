@@ -1,54 +1,50 @@
 package api
 
 import (
-	"fmt"
-	"strconv"
-
 	"github.com/humooo/avito-backend-trainee-2025/internal/models"
 )
 
-// PRToResponse converts internal PullRequest -> api.PullRequest (types.gen.go)
-func PRToResponse(pr *models.PullRequest) PullRequest {
-	resp := PullRequest{
-		PullRequestId:     fmt.Sprintf("%d", pr.ID),
+func mapPRToResponse(pr *models.PullRequest) PullRequest {
+	status := PullRequestStatusOPEN
+	if pr.Status == "MERGED" {
+		status = PullRequestStatusMERGED
+	}
+
+	return PullRequest{
+		PullRequestId:     pr.ID,
 		PullRequestName:   pr.Title,
-		AuthorId:          fmt.Sprintf("%d", pr.AuthorID),
-		Status:            PullRequestStatus(pr.Status),
-		AssignedReviewers: []string{},
+		AuthorId:          pr.AuthorID,
+		Status:            status,
+		AssignedReviewers: pr.Reviewers,
+		CreatedAt:         &pr.CreatedAt,
+		MergedAt:          pr.MergedAt,
 	}
-	for _, r := range pr.Reviewers {
-		resp.AssignedReviewers = append(resp.AssignedReviewers, fmt.Sprintf("%d", r))
-	}
-	return resp
 }
 
-// PRToShort converts internal PullRequest -> api.PullRequestShort
-func PRToShort(pr *models.PullRequest) PullRequestShort {
+func mapPullRequestShort(pr *models.PullRequest) PullRequestShort {
+	status := PullRequestShortStatusOPEN
+	if pr.Status == "MERGED" {
+		status = PullRequestShortStatusMERGED
+	}
 	return PullRequestShort{
-		AuthorId:        fmt.Sprintf("%d", pr.AuthorID),
-		PullRequestId:   fmt.Sprintf("%d", pr.ID),
+		PullRequestId:   pr.ID,
 		PullRequestName: pr.Title,
-		Status:          PullRequestShortStatus(pr.Status),
+		AuthorId:        pr.AuthorID,
+		Status:          status,
 	}
 }
 
-// TeamMembersFromModels converts []*models.User -> []TeamMember
-func TeamMembersFromModels(users []*models.User) []TeamMember {
-	var out []TeamMember
-	for _, u := range users {
-		out = append(out, TeamMember{
-			UserId:   strconv.FormatInt(u.ID, 10),
+func mapTeamToResponse(team *models.Team, users []*models.User) Team {
+	members := make([]TeamMember, len(users))
+	for i, u := range users {
+		members[i] = TeamMember{
+			UserId:   u.ID,
 			Username: u.Name,
 			IsActive: u.IsActive,
-		})
+		}
 	}
-	return out
-}
-
-// TeamToResponse converts internal team + users -> api.Team
-func TeamToResponse(team *models.Team, users []*models.User) Team {
 	return Team{
 		TeamName: team.Name,
-		Members:  TeamMembersFromModels(users),
+		Members:  members,
 	}
 }
