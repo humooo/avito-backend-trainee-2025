@@ -29,8 +29,19 @@ func (r *MemoryTeamRepo) Create(ctx context.Context, team *models.Team) error {
 	return nil
 }
 
-func (r *MemoryTeamRepo) GetById(ctx context.Context, id int64) (*models.Team, error) {
+func (r *MemoryTeamRepo) GetByID(ctx context.Context, id int64) (*models.Team, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.teams[id], nil
+}
+
+func (r *MemoryTeamRepo) FindByName(ctx context.Context, name string) (*models.Team, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, t := range r.teams {
+		if t.Name == name {
+			return t, nil
+		}
+	}
+	return nil, nil
 }

@@ -29,7 +29,7 @@ func (r *MemoryPRRepo) Create(ctx context.Context, pr *models.PullRequest) error
 	return nil
 }
 
-func (r *MemoryPRRepo) GetById(ctx context.Context, id int64) (*models.PullRequest, error) {
+func (r *MemoryPRRepo) GetByID(ctx context.Context, id int64) (*models.PullRequest, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.prs[id], nil
