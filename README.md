@@ -6,7 +6,7 @@
 
 ## 🛠 Стек технологий
 
-* **Go 1.22**
+* **Go 1.23**
 * **PostgreSQL 15** (pgx/v5 + pgxpool)
 * **Chi** (HTTP роутинг)
 * **Docker & Docker Compose**
